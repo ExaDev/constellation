@@ -1,0 +1,46 @@
+name: Build Terraform Provider
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-terraform-provider:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            os: linux
+          - arch: amd64
+            os: darwin
+          - arch: arm64
+            os: linux
+          - arch: arm64
+            os: darwin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup bazel
+        uses: ./.github/actions/setup_bazel_nix
+        with:
+          useCache: "false"
+
+      - name: Build Terraform Provider Binary
+        uses: ./.github/actions/build_tf_provider
+        with:
+          targetOS: ${{ matrix.os }}
+          targetArch: ${{ matrix.arch }}
+
+      - name: Upload Terraform Provider Binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-provider-constellation-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            build/terraform-provider-constellation-${{ matrix.os }}-${{ matrix.arch }}
