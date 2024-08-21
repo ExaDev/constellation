@@ -589,21 +589,36 @@ func (r *ClusterResource) ModifyPlan(ctx context.Context, req resource.ModifyPla
 // Create is called when the resource is created.
 func (r *ClusterResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// Read data supplied by Terraform runtime into the model
+	r.logWithContext(ctx, "INFO", "Starting cluster creation")
+
 	var data ClusterResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to read plan data", map[string]interface{}{"error": resp.Diagnostics.Errors()})
 		return
 	}
 
 	// Apply changes to the cluster, including the init RPC and skipping the node upgrade.
+	r.logWithContext(ctx, "DEBUG", "Applying cluster changes", map[string]interface{}{
+		"csp":  data.CSP.ValueString(),
+		"name": data.Name.ValueString(),
+	})
 	diags := r.apply(ctx, &data, false, true)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to apply cluster changes", map[string]interface{}{"error": resp.Diagnostics.Errors()})
 		return
 	}
 
 	// Save data into Terraform state
+	r.logWithContext(ctx, "DEBUG", "Saving cluster data to state")
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to save cluster data to state", map[string]interface{}{"error": resp.Diagnostics.Errors()})
+		return
+	}
+
+	r.logWithContext(ctx, "INFO", "Cluster creation completed successfully")
 }
 
 // Read is called when the resource is read or refreshed.
