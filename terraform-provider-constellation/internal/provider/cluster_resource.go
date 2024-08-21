@@ -787,78 +787,103 @@ func (r *ClusterResource) validateGCPNetworkConfig(ctx context.Context, data *Cl
 // apply applies changes to a cluster. It can be used for both creating and updating a cluster.
 // This implements the core part of the Create and Update methods.
 func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel, skipInitRPC, skipNodeUpgrade bool) diag.Diagnostics {
+	r.logWithContext(ctx, "INFO", "Starting cluster apply", map[string]interface{}{
+		"skipInitRPC":     skipInitRPC,
+		"skipNodeUpgrade": skipNodeUpgrade,
+	})
+
 	diags := diag.Diagnostics{}
 
 	// Parse and convert values from the Terraform state
 	// to formats the Constellation library can work with.
+	r.logWithContext(ctx, "DEBUG", "Validating GCP network config")
 	convertDiags := r.validateGCPNetworkConfig(ctx, data)
 	diags.Append(convertDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to validate GCP network config", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	csp := cloudprovider.FromString(data.CSP.ValueString())
+	r.logWithContext(ctx, "DEBUG", "Parsed CSP", map[string]interface{}{"csp": csp.String()})
 
 	// parse attestation config
+	r.logWithContext(ctx, "DEBUG", "Converting attestation config")
 	att, convertDiags := r.convertAttestationConfig(ctx, *data)
 	diags.Append(convertDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to convert attestation config", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	// parse secrets (i.e. measurement salt, master secret, etc.)
+	r.logWithContext(ctx, "DEBUG", "Converting secrets")
 	secrets, convertDiags := r.convertSecrets(*data)
 	diags.Append(convertDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to convert secrets", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	// parse API server certificate SANs
+	r.logWithContext(ctx, "DEBUG", "Getting API server cert SANs")
 	apiServerCertSANs, convertDiags := r.getAPIServerCertSANs(ctx, data)
 	diags.Append(convertDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to get API server cert SANs", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	// parse network config
+	r.logWithContext(ctx, "DEBUG", "Getting network config")
 	networkCfg, getDiags := r.getNetworkConfig(ctx, data)
 	diags.Append(getDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to get network config", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	// parse Constellation microservice config
+	r.logWithContext(ctx, "DEBUG", "Parsing microservice config")
 	var microserviceCfg extraMicroservicesAttribute
 	convertDiags = data.ExtraMicroservices.As(ctx, &microserviceCfg, basetypes.ObjectAsOptions{
 		UnhandledNullAsEmpty: true, // we want to allow null values, as the CSIDriver field is optional
 	})
 	diags.Append(convertDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to parse microservice config", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	// parse Constellation microservice version
+	r.logWithContext(ctx, "DEBUG", "Getting microservice version")
 	microserviceVersion, convertDiags := r.getMicroserviceVersion(data)
 	diags.Append(convertDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to get microservice version", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	// parse Kubernetes version
+	r.logWithContext(ctx, "DEBUG", "Getting Kubernetes version")
 	k8sVersion, getDiags := r.getK8sVersion(data)
 	diags.Append(getDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to get Kubernetes version", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	// parse OS image version
+	r.logWithContext(ctx, "DEBUG", "Getting OS image version")
 	image, imageSemver, convertDiags := r.getImageVersion(ctx, data)
 	diags.Append(convertDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to get OS image version", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	// parse license ID
+	r.logWithContext(ctx, "DEBUG", "Parsing license ID")
 	licenseID := data.LicenseID.ValueString()
 	switch {
 	case image.MarketplaceImage != nil && *image.MarketplaceImage:
@@ -874,6 +899,7 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 	}
 
 	// Parse in-cluster service account info.
+	r.logWithContext(ctx, "DEBUG", "Parsing service account info")
 	serviceAccPayload := constellation.ServiceAccountPayload{}
 	var gcpConfig gcpAttribute
 	var azureConfig azureAttribute
@@ -883,6 +909,7 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 		convertDiags = data.GCP.As(ctx, &gcpConfig, basetypes.ObjectAsOptions{})
 		diags.Append(convertDiags...)
 		if diags.HasError() {
+			r.logWithContext(ctx, "ERROR", "Failed to parse GCP config", map[string]interface{}{"error": diags.Errors()})
 			return diags
 		}
 
@@ -906,6 +933,7 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 		convertDiags = data.Azure.As(ctx, &azureConfig, basetypes.ObjectAsOptions{})
 		diags.Append(convertDiags...)
 		if diags.HasError() {
+			r.logWithContext(ctx, "ERROR", "Failed to parse Azure config", map[string]interface{}{"error": diags.Errors()})
 			return diags
 		}
 		serviceAccPayload.Azure = azureshared.ApplicationCredentials{
@@ -918,6 +946,7 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 		convertDiags = data.OpenStack.As(ctx, &openStackConfig, basetypes.ObjectAsOptions{})
 		diags.Append(convertDiags...)
 		if diags.HasError() {
+			r.logWithContext(ctx, "ERROR", "Failed to parse OpenStack config", map[string]interface{}{"error": diags.Errors()})
 			return diags
 		}
 		cloudsYAML, err := clouds.ReadCloudsYAML(file.NewHandler(afero.NewOsFs()), openStackConfig.CloudsYAMLPath)
@@ -942,8 +971,11 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 		}
 
 	}
+
+	r.logWithContext(ctx, "DEBUG", "Marshalling service account URI")
 	serviceAccURI, err := constellation.MarshalServiceAccountURI(csp, serviceAccPayload)
 	if err != nil {
+		r.logWithContext(ctx, "ERROR", "Failed to marshal service account URI", map[string]interface{}{"error": err.Error()})
 		diags.AddError("Marshalling service account URI", err.Error())
 		return diags
 	}
@@ -955,14 +987,17 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 	}
 
 	// setup clients
+	r.logWithContext(ctx, "DEBUG", "Setting up clients")
 	validator, err := choose.Validator(att.config, &tfContextLogger{ctx: ctx})
 	if err != nil {
+		r.logWithContext(ctx, "ERROR", "Failed to choose validator", map[string]interface{}{"error": err.Error()})
 		diags.AddError("Choosing validator", err.Error())
 		return diags
 	}
 	applier := r.newApplier(ctx, validator)
 
 	// Construct in-memory state file
+	r.logWithContext(ctx, "DEBUG", "Constructing in-memory state file")
 	stateFile := state.New().SetInfrastructure(state.Infrastructure{
 		UID:               data.UID.ValueString(),
 		ClusterEndpoint:   data.OutOfClusterEndpoint.ValueString(),
@@ -995,21 +1030,24 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 	}
 
 	// Check license
+	r.logWithContext(ctx, "DEBUG", "Checking license")
 	quota, err := applier.CheckLicense(ctx, csp, !skipInitRPC, licenseID)
 	if err != nil {
+		r.logWithContext(ctx, "WARN", "Unable to contact license server", map[string]interface{}{"error": err.Error()})
 		diags.AddWarning("Unable to contact license server.", "Please keep your vCPU quota in mind.")
 	} else if licenseID == license.CommunityLicense {
+		r.logWithContext(ctx, "WARN", "Using community license")
 		diags.AddWarning("Using community license.", "For details, see https://docs.edgeless.systems/constellation/overview/license")
 	} else {
-		tflog.Info(ctx, fmt.Sprintf("Please keep your vCPU quota (%d) in mind.", quota))
+		r.logWithContext(ctx, "INFO", "License check completed", map[string]interface{}{"vCPU_quota": quota})
 	}
 
 	// Now, we perform the actual applying.
 
 	// Run init RPC
-	var initDiags diag.Diagnostics
 	if !skipInitRPC {
 		// run the init RPC and retrieve the post-init state
+		r.logWithContext(ctx, "INFO", "Running init RPC")
 		initRPCPayload := initRPCPayload{
 			csp:               csp,
 			masterSecret:      secrets.masterSecret,
@@ -1022,9 +1060,10 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 			k8sVersion:        k8sVersion,
 			inClusterEndpoint: inClusterEndpoint,
 		}
-		initDiags = r.runInitRPC(ctx, applier, initRPCPayload, data, validator, stateFile)
+		initDiags := r.runInitRPC(ctx, applier, initRPCPayload, data, validator, stateFile)
 		diags.Append(initDiags...)
 		if diags.HasError() {
+			r.logWithContext(ctx, "ERROR", "Init RPC failed", map[string]interface{}{"error": diags.Errors()})
 			return diags
 		}
 	}
@@ -1032,6 +1071,7 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 	// Here, we either have the post-init values from the actual init RPC
 	// or, if performing an upgrade and skipping the init RPC, we have the
 	// values from the Terraform state.
+	r.logWithContext(ctx, "DEBUG", "Setting cluster values")
 	stateFile.SetClusterValues(state.ClusterValues{
 		ClusterID:       data.ClusterID.ValueString(),
 		OwnerID:         data.OwnerID.ValueString(),
@@ -1040,25 +1080,32 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 
 	// Kubeconfig is in the state by now. Either through the init RPC or through
 	// already being in the state.
+	r.logWithContext(ctx, "DEBUG", "Setting kubeconfig")
 	if err := applier.SetKubeConfig([]byte(data.KubeConfig.ValueString())); err != nil {
+		r.logWithContext(ctx, "ERROR", "Failed to set kubeconfig", map[string]interface{}{"error": err.Error()})
 		diags.AddError("Setting kubeconfig", err.Error())
 		return diags
 	}
 
 	// Apply attestation config
+	r.logWithContext(ctx, "DEBUG", "Applying attestation config")
 	if err := applier.ApplyJoinConfig(ctx, att.config, secrets.measurementSalt); err != nil {
+		r.logWithContext(ctx, "ERROR", "Failed to apply attestation config", map[string]interface{}{"error": err.Error()})
 		diags.AddError("Applying attestation config", err.Error())
 		return diags
 	}
 
 	// Extend API Server Certificate SANs
+	r.logWithContext(ctx, "DEBUG", "Extending API server certificate SANs")
 	if err := applier.ExtendClusterConfigCertSANs(ctx, data.OutOfClusterEndpoint.ValueString(),
 		"", apiServerCertSANs); err != nil {
+		r.logWithContext(ctx, "ERROR", "Failed to extend API server certificate SANs", map[string]interface{}{"error": err.Error()})
 		diags.AddError("Extending API server certificate SANs", err.Error())
 		return diags
 	}
 
 	// Apply Helm Charts
+	r.logWithContext(ctx, "INFO", "Applying Helm charts")
 	payload := applyHelmChartsPayload{
 		csp:                 cloudprovider.FromString(data.CSP.ValueString()),
 		attestationVariant:  att.variant,
@@ -1079,11 +1126,13 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 	helmDiags := r.applyHelmCharts(ctx, applier, payload, stateFile)
 	diags.Append(helmDiags...)
 	if diags.HasError() {
+		r.logWithContext(ctx, "ERROR", "Failed to apply Helm charts", map[string]interface{}{"error": diags.Errors()})
 		return diags
 	}
 
 	if !skipNodeUpgrade {
 		// Upgrade node image
+		r.logWithContext(ctx, "INFO", "Upgrading node image")
 		err = applier.UpgradeNodeImage(ctx,
 			imageSemver,
 			image.Reference,
@@ -1091,26 +1140,33 @@ func (r *ClusterResource) apply(ctx context.Context, data *ClusterResourceModel,
 		var upgradeImageErr *compatibility.InvalidUpgradeError
 		switch {
 		case errors.Is(err, kubecmd.ErrInProgress):
+			r.logWithContext(ctx, "WARN", "Skipping OS image upgrade: Another upgrade is already in progress")
 			diags.AddWarning("Skipping OS image upgrade", "Another upgrade is already in progress.")
 		case errors.As(err, &upgradeImageErr):
+			r.logWithContext(ctx, "WARN", "Ignoring invalid OS image upgrade", map[string]interface{}{"error": err.Error()})
 			diags.AddWarning("Ignoring invalid OS image upgrade", err.Error())
 		case err != nil:
+			r.logWithContext(ctx, "ERROR", "Failed to upgrade OS image", map[string]interface{}{"error": err.Error()})
 			diags.AddError("Upgrading OS image", err.Error())
 			return diags
 		}
 
 		// Upgrade Kubernetes components
+		r.logWithContext(ctx, "INFO", "Upgrading Kubernetes components")
 		err = applier.UpgradeKubernetesVersion(ctx, k8sVersion, false)
 		var upgradeK8sErr *compatibility.InvalidUpgradeError
 		switch {
 		case errors.As(err, &upgradeK8sErr):
+			r.logWithContext(ctx, "WARN", "Ignoring invalid Kubernetes components upgrade", map[string]interface{}{"error": err.Error()})
 			diags.AddWarning("Ignoring invalid Kubernetes components upgrade", err.Error())
 		case err != nil:
+			r.logWithContext(ctx, "ERROR", "Failed to upgrade Kubernetes components", map[string]interface{}{"error": err.Error()})
 			diags.AddError("Upgrading Kubernetes components", err.Error())
 			return diags
 		}
 	}
 
+	r.logWithContext(ctx, "INFO", "Cluster apply completed successfully")
 	return diags
 }
 
