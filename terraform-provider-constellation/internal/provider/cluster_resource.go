@@ -1401,3 +1401,24 @@ type nopSpinner struct{ io.Writer }
 func (s *nopSpinner) Start(string, bool)              {}
 func (s *nopSpinner) Stop()                           {}
 func (s *nopSpinner) Write([]byte) (n int, err error) { return 1, nil }
+
+func (r *ClusterResource) logWithContext(ctx context.Context, level string, msg string, additionalFields ...map[string]interface{}) {
+	fields := map[string]interface{}{
+		"resource": "ClusterResource",
+	}
+	for _, af := range additionalFields {
+		for k, v := range af {
+			fields[k] = v
+		}
+	}
+	switch level {
+	case "DEBUG":
+		tflog.Debug(ctx, msg, fields)
+	case "INFO":
+		tflog.Info(ctx, msg, fields)
+	case "WARN":
+		tflog.Warn(ctx, msg, fields)
+	case "ERROR":
+		tflog.Error(ctx, msg, fields)
+	}
+}
