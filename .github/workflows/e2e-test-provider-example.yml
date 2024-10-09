@@ -63,7 +63,7 @@ on:
 
 jobs:
   provider-example-test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       id-token: write
       contents: read
@@ -306,6 +306,19 @@ jobs:
           cat >> _override.tf <<EOF
           locals {
             instance_type = "Standard_DC4es_v5"
+            subscription_id = "$(az account show --query id --output tsv)"
+          }
+          EOF
+          cat _override.tf
+
+      - name: Create Azure SEV-SNP Terraform overrides
+        if: inputs.attestationVariant == 'azure-sev-snp'
+        working-directory: ${{ github.workspace }}/cluster
+        shell: bash
+        run: |
+          cat >> _override.tf <<EOF
+          locals {
+            subscription_id = "$(az account show --query id --output tsv)"
           }
           EOF
           cat _override.tf

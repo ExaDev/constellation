@@ -1,4 +1,4 @@
-FROM ubuntu:22.04@sha256:340d9b015b194dc6e2a13938944e0d016e57b9679963fdeb9ce021daac430221
+FROM ubuntu:22.04@sha256:58b87898e82351c6cf9cf5b9f3c20257bb9e2dcf33af051e12ce532d7f94e3fe
 
 # Install requirements
 RUN apt-get update && apt-get install -y software-properties-common &&\

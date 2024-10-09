@@ -13,7 +13,7 @@ on:
 jobs:
   build-cli:
     name: Build Windows CLI
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       id-token: write
       checks: write
@@ -84,7 +84,7 @@ jobs:
           $rgName = "e2e-win-${{ github.run_id }}-${{ github.run_attempt }}-$uid"
           "rgName=$($rgName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           .\constellation.exe config generate azure -t "workflow=${{ github.run_id }}"
-          .\constellation.exe iam create azure --region=westus --resourceGroup=$rgName-rg --servicePrincipal=$rgName-sp --update-config --debug -y
+          .\constellation.exe iam create azure --subscriptionID=${{ secrets.AZURE_SUBSCRIPTION_ID }} --region=westus --resourceGroup=$rgName-rg --servicePrincipal=$rgName-sp --update-config --debug -y
 
       - name: Login to Azure (Cluster service principal)
         uses: ./.github/actions/login_azure
@@ -178,7 +178,7 @@ jobs:
 
   notify-failure:
     name: Notify about failure
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: e2e-test
     if: |
       failure() &&

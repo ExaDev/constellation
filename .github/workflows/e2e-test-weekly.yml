@@ -12,7 +12,7 @@ jobs:
       matrix:
         refStream: ["ref/main/stream/nightly/?","ref/main/stream/debug/?", "ref/release/stream/stable/?"]
     name: Find latest image
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       id-token: write
       contents: read
@@ -313,7 +313,7 @@ jobs:
             kubernetes-version: "v1.29"
             clusterCreation: "cli"
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       id-token: write
       checks: write
@@ -357,6 +357,7 @@ jobs:
           gcpClusterCreateServiceAccount: "infrastructure-e2e@constellation-e2e.iam.gserviceaccount.com"
           gcpIAMCreateServiceAccount: "iam-e2e@constellation-e2e.iam.gserviceaccount.com"
           test: ${{ matrix.test }}
+          azureSubscriptionID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           azureClusterCreateCredentials: ${{ secrets.AZURE_E2E_CLUSTER_CREDENTIALS }}
           azureIAMCreateCredentials: ${{ secrets.AZURE_E2E_IAM_CREDENTIALS }}
           registry: ghcr.io
@@ -419,7 +420,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        fromVersion: ["v2.17.0"]
+        fromVersion: ["v2.18.0"]
         attestationVariant: ["gcp-sev-snp", "azure-sev-snp", "azure-tdx", "aws-sev-snp"]
     name: Run upgrade tests
     secrets: inherit
@@ -438,7 +439,7 @@ jobs:
 
   e2e-mini:
     name: Run miniconstellation E2E test
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     environment: e2e
     permissions:
       id-token: write
